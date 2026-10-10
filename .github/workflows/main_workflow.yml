@@ -1,76 +1,119 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
-# More info on Python, GitHub Actions, and Azure App Service: https://aka.ms/python-webapps-actions
-
+# Nome do workflow exibido na aba "Actions" do GitHub
 name: Build and deploy Python app to Azure Web App - workflow
 
+# Define os eventos que disparam a execução do workflow
 on:
+  # Dispara o workflow quando há um push (envio de commits) para o repositório
   push:
+    # Restringe o gatilho de push a branches específicas
     branches:
+      # Só executa quando o push for na branch "main"
       - 'main'
+  # Permite executar o workflow manualmente pelo botão "Run workflow" no GitHub
   workflow_dispatch:
 
+# Início da definição dos jobs (conjuntos de tarefas) do workflow
 jobs:
+  # Job chamado "build": prepara e empacota a aplicação
   build:
+    # Executa o job em uma máquina virtual Linux (Ubuntu) fornecida pelo GitHub
     runs-on: ubuntu-latest
+    # Define as permissões do token GITHUB_TOKEN neste job
     permissions:
-      contents: read #This is required for actions/checkout
+      # Permissão de apenas leitura do conteúdo do repositório (necessária para o checkout)
+      contents: read
 
+    # Lista de passos (steps) executados em sequência dentro do job "build"
     steps:
+      # NOVO STEP: nome do passo exibido no log da execução
+      - name: Mensagem inicial
+        # Executa o comando echo, que imprime a mensagem no console do runner
+        run: echo "Iniciando o pipeline de CI/CD - etapa de build"
+
+      # Usa a action oficial que clona (baixa) o código do repositório para a máquina do runner
       - uses: actions/checkout@v4
 
+      # Nome do passo que configura o Python
       - name: Set up Python version
+        # Usa a action oficial que instala uma versão específica do Python no runner
         uses: actions/setup-python@v5
+        # Parâmetros passados para a action
         with:
+          # Define que a versão do Python instalada será a 3.14
           python-version: '3.14'
 
-      # 🛠️ Local Build Section (Optional)
-      # The following section in your workflow is designed to catch build issues early on the client side, before deployment. This can be helpful for debugging and validation. However, if this step significantly increases deployment time and early detection is not critical for your workflow, you may remove this section to streamline the deployment process.
+      # Nome do passo que cria o ambiente virtual e instala as dependências
       - name: Create and Start virtual environment and Install dependencies
+        # Executa vários comandos de shell (o "|" permite comandos em múltiplas linhas)
         run: |
+          # Cria um ambiente virtual Python chamado "antenv"
           python -m venv antenv
+          # Ativa o ambiente virtual, isolando os pacotes instalados a seguir
           source antenv/bin/activate
+          # Instala todas as dependências listadas no arquivo requirements.txt (valida se o build funciona)
           pip install -r requirements.txt
-                
-      # By default, when you enable GitHub CI/CD integration through the Azure portal, the platform automatically sets the SCM_DO_BUILD_DURING_DEPLOYMENT application setting to true. This triggers the use of Oryx, a build engine that handles application compilation and dependency installation (e.g., pip install) directly on the platform during deployment. Hence, we exclude the antenv virtual environment directory from the deployment artifact to reduce the payload size. 
+
+      # Nome do passo que salva os arquivos do projeto como artefato
       - name: Upload artifact for deployment jobs
+        # Usa a action oficial que envia arquivos como artefato para serem usados por outros jobs
         uses: actions/upload-artifact@v4
+        # Parâmetros passados para a action
         with:
+          # Nome do artefato gerado (será usado no job de deploy para baixá-lo)
           name: python-app
+          # Caminhos incluídos/excluídos do artefato (múltiplas linhas)
           path: |
+            # Inclui todos os arquivos da pasta atual (raiz do projeto)
             .
+            # Exclui a pasta do ambiente virtual, pois o Azure (Oryx) reinstala as dependências no deploy
             !antenv/
 
-      # 🚫 Opting Out of Oryx Build
-      # If you prefer to disable the Oryx build process during deployment, follow these steps:
-      # 1. Remove the SCM_DO_BUILD_DURING_DEPLOYMENT app setting from your Azure App Service Environment variables.
-      # 2. Refer to sample workflows for alternative deployment strategies: https://github.com/Azure/actions-workflow-samples/tree/master/AppService
-      
-
+  # Job chamado "deploy": publica a aplicação no Azure
   deploy:
+    # Executa o job em uma máquina virtual Linux (Ubuntu)
     runs-on: ubuntu-latest
+    # Faz este job esperar o job "build" terminar com sucesso antes de começar
     needs: build
+    # Define as permissões do token GITHUB_TOKEN neste job
     permissions:
-      id-token: write #This is required for requesting the JWT
-      contents: read #This is required for actions/checkout
+      # Permite solicitar um token JWT (OIDC) para autenticar no Azure sem senha
+      id-token: write
+      # Permissão de apenas leitura do conteúdo do repositório
+      contents: read
 
+    # Lista de passos executados dentro do job "deploy"
     steps:
+      # Nome do passo que baixa o artefato gerado no build
       - name: Download artifact from build job
+        # Usa a action oficial que baixa artefatos enviados por outros jobs
         uses: actions/download-artifact@v4
+        # Parâmetros passados para a action
         with:
+          # Nome do artefato a ser baixado (o mesmo enviado no job build)
           name: python-app
-      
+
+      # Nome do passo que faz login no Azure
       - name: Login to Azure
+        # Usa a action oficial do Azure para autenticação
         uses: azure/login@v2
+        # Parâmetros de autenticação, lidos dos "secrets" (valores secretos) do repositório
         with:
+          # ID do aplicativo (service principal) registrado no Azure
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_4226F73FBF674D0FAB55B1276EB1E9B2 }}
+          # ID do tenant (diretório/organização) do Azure
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_65F9E6368CD2400291FDFD86C7DD2F0A }}
+          # ID da assinatura do Azure onde está o App Service
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_B928003F00CB4F57BF3E9513AF214FF5 }}
 
+      # Nome do passo que faz o deploy da aplicação
       - name: 'Deploy to Azure Web App'
+        # Usa a action oficial que publica a aplicação no Azure App Service
         uses: azure/webapps-deploy@v3
+        # Identificador do passo, permite referenciar suas saídas (ex.: URL do app) em outros passos
         id: deploy-to-webapp
+        # Parâmetros passados para a action
         with:
+          # Nome do Web App no Azure que receberá o deploy
           app-name: 'workflow'
+          # Slot de implantação usado (Production = ambiente de produção)
           slot-name: 'Production'
-          
