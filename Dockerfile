@@ -1,2 +1,2 @@
 FROM alpine
-CMD ["echo", "Mackenzie!"]
+CMD ["echo", "python app.py"]
